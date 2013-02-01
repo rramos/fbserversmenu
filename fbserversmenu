@@ -1,0 +1,194 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use Env qw(HOME);
+use Data::Dumper;
+use Scalar::Util 'reftype';
+
+# DATA files
+my $ssh_datafile = "$HOME/.sshm";
+my $rdp_datafile = "$HOME/.rdp";
+my $rdpauthfile = '/media/truecrypt2/RDP/auth';
+
+# SSH default options ...
+my $terminal = '/usr/bin/terminator';
+
+# RDP default options ...
+my $rdp = '/usr/bin/rdesktop';
+my $rdp_res="1024x768";
+my $rdp_share="disk:Z=$HOME/Public";
+my $rdp_klang="pt";
+
+# sort array alfabetic
+my @data = ();
+my $hash = {};
+
+# Loading data for SSH connections ...
+open FILE, "<$ssh_datafile" or die $!;
+while (<FILE>) { 
+ chomp;
+ #print "[DEBUG] ".$_."\n";
+ if(! /#/ && $_){ # ignore comments
+    push(@data,$_);
+ }
+}
+close(FILE);
+
+# Sorting data
+@data = sort(@data);
+
+# Process data for ssh connections and fill hash...
+foreach my $line (@data){
+   my ($alias,$user,$ip,$port) = split(' ', $line);
+   my @location = split('_',$alias);
+   my $loc_size = @location;
+   my $server_name = $location[-1];
+   pop(@location);
+
+   my @value = ($server_name,$loc_size,$user,$ip,$port,"ssh");
+   my $key = "@location";
+
+   # fill hash with new values 
+   if (! $hash->{$key} ){
+      $hash->{$key}->[0]=\@value;
+   }else{
+      push($hash->{$key},\@value);
+   }
+}
+
+# clean data array
+@data = ();
+
+# Loading data for SSH connections ...
+open FILE, "<$rdp_datafile" or die $!;
+while (<FILE>) { 
+ chomp;
+ #print "[DEBUG] ".$_."\n";
+ if(! /#/ && $_){ # ignore comments
+    push(@data,$_);
+ }
+}
+close(FILE);
+
+# Sorting data
+@data = sort(@data);
+
+# Process RDP connections and add to hash...
+foreach my $line (@data){
+   my ($alias,$user,$ip,$port) = split(' ', $line);
+   my @location = split('_',$alias);
+   my $loc_size = @location;
+   my $server_name = $location[-1];
+   pop(@location);
+
+   my @value = ($server_name,$loc_size,$user,$ip,$port,"rdp");
+   my $key = "@location";
+
+   # fill hash with new values 
+   if (! $hash->{$key} ){
+      $hash->{$key}->[0]=\@value;
+   }else{
+      push($hash->{$key},\@value);
+   }
+}
+
+
+# Recursive method for menu generation
+&make_menus("",$hash);
+
+
+exit 0;
+
+# -------------------------- Functions ----------------------------
+
+# Recursive method for menu generation
+sub make_menus{
+    my ($scope,$hash) = @_;
+    #print "[DEBUG] Make Menus for ($scope)\n";
+    
+    # End of recursive call
+    if(keys( %$hash ) == 0) { 
+	return;
+    }else{
+	# We got hash with values process...
+	while ( my ($key, $value) = each(%$hash) ) {
+	    my @ns = split(' ',$key);
+	    my $ns_size = @ns;
+	    
+	    # if size == 1 call recursive call with filtered hash
+	    if ($ns_size == 1 ){
+		#print "[DEBUG] Recursive call for ($scope)NS($ns[0])\n";
+		my $filtered_hash = {};
+		&filter_hash($ns[0],$hash,$filtered_hash);
+		
+		# Generate submenu
+		my $title = uc $ns[0];
+		print " [submenu] ($title)\n";
+     		&make_menus($ns[0],$filtered_hash);
+		print " [end]\n";
+		
+		# remove entry 
+		delete $hash->{$ns[0]};
+	    }
+	    
+	    # if size == 0 print menus
+	    if ($ns_size == 0){
+		#print "[DEBUG] Print servers for NS($scope)\n";   
+		&make_servers($scope,$hash);
+	    }
+	}
+    }
+}
+  
+# filter hash
+sub filter_hash{
+    my ($level,$h,$ns_hash) = @_;
+    my %hash = %$h;
+
+    while ( my ($key, $value) = each(%$h) ) {
+	if (! $key eq "" ){
+	    my @ns = split(' ',$key);
+	    my $ns_size = @ns;
+	    
+	    if ( $ns_size > 0 && $ns[0] eq $level ){
+		shift(@ns);
+		$ns_hash->{"@ns"} = $value;
+	    }
+	}
+    }
+}
+
+# Print servers for scope and remove form hash
+sub make_servers {
+    my ($scope,$ref) = @_;
+    my %hash = %$ref;
+    my @value = $ref->{''};
+    
+    foreach my $servers(@value){
+	foreach my $srv (@$servers){
+	  # Determine type of connection...
+          #print "[DEBUG] --\n".Dumper($srv)."--\n";
+	  if ( $srv->[5] eq "ssh"){
+	    # SSH connections....
+	    print "   [exec] ($srv->[0]) { $terminal -e 'ssh -p $srv->[4] $srv->[2]\@$srv->[3]}\n";
+	  }elsif ( $srv->[5] eq "rdp"){
+	    # RDP Connections...
+	    if ( -f $rdpauthfile ){
+		# TODO: get password from encryptfile ...
+                my $rdp_pass="WAAZUUP"; 
+	        print "   [exec] ($srv->[0]) { $rdp -u $srv->[2] -p $rdp_pass -k $rdp_klang -g $rdp_res -r $rdp_share $srv->[3]:$srv->[4]}\n";
+	    }else{
+	        print "   [exec] ($srv->[0]) { $rdp -u $srv->[2] -k $rdp_klang -g $rdp_res -r $rdp_share $srv->[3]:$srv->[4]}\n";
+	    }
+          }else{
+             # Undefined connection type
+	  }
+        }
+   }
+    
+    # Remove entry
+    delete $ref->{''};
+}
+

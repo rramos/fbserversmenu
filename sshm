@@ -1,0 +1,10 @@
+#!/bin/sh
+
+FBOXFILE='/home/$USER/.fluxbox/servers-menu'
+
+# call sshm binary
+/usr/bin/sshm.bin $@
+
+# call fluxbox menus generation
+/usr/local/bin/fbserversmenu > $FBOXFILE 2> /dev/null
+
