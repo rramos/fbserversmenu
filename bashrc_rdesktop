@@ -1,0 +1,27 @@
+
+rdesktop() {
+
+  RDPCLI='/usr/bin/rdesktop'
+  CRYPTFILE='/media/truecrypt2/RDP/auth'
+  ARGS=$@
+
+  # get last argument
+  KEY=`echo $ARGS | awk -F' ' '{print $NF}'`
+
+  # retrieve pass for KEY
+  KEY=$(grep $KEY $CRYPTFILE | cut -f1 )
+  USER=$(grep $KEY $CRYPTFILE | cut -f2 )
+  IP=$(grep $KEY $CRYPTFILE | cut -f3 )
+  PASS=$(grep $KEY $CRYPTFILE | cut -f4 )
+
+  COMMAND=`echo -n "$RDPCLI $ARGS" | sed "s/$KEY//g" && echo "-u $USER -p $PASS $IP "`
+
+  # debug
+  #echo $COMMAND
+  
+  $COMMAND
+
+  return 0
+}
+
+
